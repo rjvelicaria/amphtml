@@ -18,6 +18,7 @@ import {loadScript, writeScript, validateData} from '../3p/3p';
 import {doubleclick} from '../ads/google/doubleclick';
 
 const hasOwnProperty = Object.prototype.hasOwnProperty;
+const DEBUG_MODE = true;
 
 /**
  * Sort of like Object.assign.
@@ -44,8 +45,6 @@ function assign(target, source) {
 export function openx(global, data) {
   const openxData = ['host', 'nc', 'auid', 'dfpSlot', 'dfp'];
   const dfpData = assign({}, data); // Make a copy for dfp.
-  const DEBUG_MODE = true; //global.location.href.indexOf('OX_DEBUG=1') !== -1;
-  const DEBUG_HOST = 'qa-v2-i63-auto-pmp.del-qa.openx.net';
 
   // TODO: check mandatory fields
   validateData(data, [], openxData);
@@ -74,67 +73,25 @@ export function openx(global, data) {
 
   // Decide how to render.
   if (data.host) {
-    let jssdk = `https://${data.host}/mw/1.0/jstag?hbv=2.0&dbg=1`;
+    let jssdk = `https://${data.host}/mw/1.0/jstag`;
     if (DEBUG_MODE) {
-      jssdk = `http://${data.host}/jstag?dbg=1`;
-    }
-
-    global.OX_cmds = global.OX_cmds || [];
-      global.OX_cmds.push(function(){
-        if (OX) {
-          console.debug(`OXHBConfig ox_cmds push`, global, global.OXHBConfig);
-          global.OXHBConfig = global.OXHBConfig || {
-            _bidderConfiguration: 'hb_2amp',
-            ad_position_detection_enabled: true,
-            host: DEBUG_MODE ? DEBUG_HOST : data.host,
-            medium: 'mw',
-            oxns: 'OX',
-            siteName: global.location.ancestorOrigins[0]
-          };
-          DEBUG_MODE && OX.setGateway('qa-v2-i63-auto-pmp.del-qa.openx.net/mw');
-        }
-      });
-    if (data.nc && data.dfpSlot) { // Use DFP Bidder
-      jssdk += '&nc=' + encodeURIComponent(data.nc);
-
-      global.OX_dfp_ads = [
-        [
-          data.dfpSlot,
-          [data.width + 'x' + data.height],
-          'c'
-        ]
+      jssdk = `http://localhost:9000/jstag`;
+      global.OX_cmds = [
+        () => {OX.setGateway('qa-v2-i63-auto-pmp.del-qa.openx.net/mw');}
       ];
-      global.doubleclick = doubleclick;
-      global.oxDone = () => {
-        console.debug(`OX Done!!!`, dfpData, global);
-        doubleclick(global, dfpData);
+    }
+    let jssdkParams = ['dbg=1'];
+
+    if (data.nc) {
+      jssdkParams.push('nc=' + encodeURIComponent(data.nc));
+      jssdk += '?' + jssdkParams.join('&');
+      if (data.dfpSlot && data.auid) {
+        console.debug('taking the advance route');
+        advanceImplementation(global, jssdk, dfpData, data);
+      } else if (data.dfpSlot) {
+        console.debug('taking the standard route');
+        standardImplementation(global, jssdk, dfpData);
       }
-      dfpData.targeting = Object.assign({
-          get oxb() {
-            var priceMap = global.oxhbjs && global.oxhbjs.getPriceMap();
-            if (priceMap) {
-              return priceMap['c'].size + '_' + priceMap['c'].price + ',hb-bid-' + priceMap['c'].bid_id;
-            }
-            return 'none_t'
-
-          }
-        }, dfpData.targeting || {});
-      global.dfpData = dfpData;
-
-      writeScript(global, jssdk, () => {
-        /*eslint "google-camelcase/google-camelcase": 0*/
-        /**
-         * Local Dev Mode Patch start here
-         */
-        writeScript(global, 'http://localhost:9000/dist/hb-sdk.js', () => {
-          console.debug(`OXHBConfig hb-sdk load`, global.OXHBConfig);
-        });
-        /**
-         * Local Dev Mode Patch end here
-         */
-        // OX._requestArgs['amp'] = 1;
-        // doubleclick(global, dfpData);
-      });
     } else if (data.auid) { // Just show an ad.
       global.OX_cmds = [
         () => {
@@ -142,16 +99,49 @@ export function openx(global, data) {
           const oxAnchor = global.document.createElement('div');
           global.document.body.appendChild(oxAnchor);
           /*eslint "google-camelcase/google-camelcase": 0*/
-          OX._requestArgs['amp'] = 1;
+          OX._requestArgs['bc'] = 'ox_amp';
           oxRequest.addAdUnit(data.auid);
           oxRequest.setAdSizes([data.width + 'x' + data.height]);
           oxRequest.getOrCreateAdUnit(data.auid).set('anchor', oxAnchor);
           oxRequest.load();
-        },
+        }
       ];
       loadScript(global, jssdk);
     }
   } else if (data.dfpSlot) { // Fall back to a DFP ad.
     doubleclick(global, dfpData);
+  }
+}
+
+function standardImplementation(global, jssdk, dfpData) {
+  writeScript(global, jssdk, () => {
+    /*eslint "google-camelcase/google-camelcase": 0*/
+    OX._requestArgs['bc'] = "hb_1amp";
+    doubleclick(global, dfpData);
+  });
+}
+
+function advanceImplementation(global, jssdk, dfpData, data) {
+  global.OX_bidder_options = {
+    bidderType: 'hb_2amp',
+    callback: () => {
+      console.debug('OX Done!!', global.OX.dfp_bidder);
+      const priceMap = global.oxhbjs && global.oxhbjs.getPriceMap();
+      const targeting = priceMap ? `${priceMap['c'].size}_${priceMap['c'].price},hb-bid-${priceMap['c'].bid_id}` : 'none_t';
+      dfpData.targeting = dfpData.targeting || {};
+      console.debug(`targeting`, targeting);
+      assign(dfpData.targeting, {oxb: targeting});
+      doubleclick(global, dfpData);
+    }
+  };
+  global.OX_bidder_ads = [ [data.dfpSlot, [data.width + 'x' + data.height], 'c'] ];
+  global.dfpData = dfpData;
+  global.doubleclick = doubleclick;
+  if (DEBUG_MODE) {
+    writeScript(global, jssdk, () => {
+      writeScript(global, `http://localhost:9000/dist/hb-sdk.js`);
+    })
+  } else {
+    loadScript(global, jssdk);
   }
 }
