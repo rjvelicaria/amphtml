@@ -135,8 +135,6 @@ function advanceImplementation(global, jssdk, dfpData, data) {
     }
   };
   global.OX_bidder_ads = [ [data.dfpSlot, [data.width + 'x' + data.height], 'c'] ];
-  global.dfpData = dfpData;
-  global.doubleclick = doubleclick;
   if (DEBUG_MODE) {
     writeScript(global, jssdk, () => {
       writeScript(global, `http://localhost:9000/dist/hb-sdk.js`);
