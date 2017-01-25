@@ -102,6 +102,7 @@ export function openx(global, data) {
           oxRequest.addAdUnit(data.auid);
           oxRequest.setAdSizes([data.width + 'x' + data.height]);
           oxRequest.getOrCreateAdUnit(data.auid).set('anchor', oxAnchor);
+          global.context.renderStart();
           oxRequest.load();
         }
       ];
