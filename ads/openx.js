@@ -123,7 +123,7 @@ function standardImplementation(global, jssdk, dfpData) {
 
 function advanceImplementation(global, jssdk, dfpData, data) {
   global.OX_bidder_options = {
-    bidderType: 'hb_2amp',
+    bidderType: 'hb_amp',
     callback: () => {
       console.debug('OX Done!!', global.OX.dfp_bidder);
       const priceMap = global.oxhbjs && global.oxhbjs.getPriceMap();
