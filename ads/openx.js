@@ -99,7 +99,6 @@ export function openx(global, data) {
           const oxAnchor = global.document.createElement('div');
           global.document.body.appendChild(oxAnchor);
           /*eslint "google-camelcase/google-camelcase": 0*/
-          OX._requestArgs['bc'] = 'ox_amp';
           oxRequest.addAdUnit(data.auid);
           oxRequest.setAdSizes([data.width + 'x' + data.height]);
           oxRequest.getOrCreateAdUnit(data.auid).set('anchor', oxAnchor);
@@ -116,7 +115,6 @@ export function openx(global, data) {
 function standardImplementation(global, jssdk, dfpData) {
   writeScript(global, jssdk, () => {
     /*eslint "google-camelcase/google-camelcase": 0*/
-    OX._requestArgs['bc'] = "hb_1amp";
     doubleclick(global, dfpData);
   });
 }
